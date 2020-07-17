@@ -1,0 +1,501 @@
+/**
+ * CandyCruncher.java
+ * Version 2 (4++)
+ * @author Andy Li
+ * November 1, 2018
+ * A program that plays a candy crusher like game (Candy Cruncher) and achieves the maximum score possible while outputting the moves performed.
+ */
+
+import java.io.File;
+import java.util.Scanner;
+import java.util.Stack;
+import java.util.ArrayList;
+
+class CandyCruncher{
+  
+  //Initialize global variables to be used in multiple methods.
+  static int counter;
+  static int maxPoints;
+  static int rows;
+  static int columns;
+  static boolean emptyBoard;
+  static int[][] visited;
+  static char[][] temporaryBoard;
+  static Stack<char[][]> boardStack;
+  static Stack<char[][]> swapStack;
+  static Stack<int[]> candyPosStack;
+  static Stack<char[]> candyLetterStack; 
+  static Stack<char[][]> bestBoardStack;
+  static Stack<char[][]> bestSwapStack;
+  static Stack<int[]> bestCandyPosStack;
+  static Stack<char[]> bestCandyLetterStack;
+  static ArrayList<char[][]>[] duplicateBoard;
+  
+  /**
+   * main
+   * This method gets the input, calls the other methods, and outputs the results
+   * @param String [] args which is the code you type inside it.
+   */
+  public static void main (String [] args) throws Exception{
+    
+    //Welcome message, variable and board initilization, and reads board from file.
+    double startTime = System.nanoTime()/1000000000.0;
+    System.out.println("Welcome to Candy Cruncher!\n");
+    char[][] gameBoard = readFile();
+    rows = gameBoard.length;
+    columns = gameBoard[0].length;
+    duplicateBoard = new ArrayList[rows*columns+1];
+    for(int i=0; i<=rows*columns; i++) {
+      duplicateBoard[i] = new ArrayList<>();
+    }
+    emptyBoard = false;
+    boardStack = new Stack();
+    swapStack = new Stack();
+    candyPosStack = new Stack();
+    candyLetterStack = new Stack();
+    bestBoardStack = new Stack();
+    bestSwapStack = new Stack();
+    bestCandyPosStack = new Stack();
+    bestCandyLetterStack = new Stack();
+    Stack<char[][]> reverseBoardStack = new Stack();
+    Stack<char[][]> reverseSwapStack = new Stack();
+    Stack<int[]> reverseCandyPosStack = new Stack();
+    Stack<char[]> reverseCandyLetterStack = new Stack();
+    
+    //Fills in starting board (1 more element in the board stack than other stacks), 
+    //and exucute method to find best moveset.
+    boardStack.add(gameBoard);
+    bestBoardStack.add(gameBoard);
+    duplicateBoard[0].add(gameBoard);
+    maxPoints = 0;
+    bestMoveSet(gameBoard,0);
+    System.out.println("Best move calculation finished!");
+    System.out.println("Runtime for Calculations: "+((System.nanoTime()/1000000000.0)-startTime)+" seconds.\n");
+    
+    //Reverse all the stacks
+    while(!bestSwapStack.isEmpty()) {
+      reverseBoardStack.push(bestBoardStack.pop());
+      reverseSwapStack.push(bestSwapStack.pop());
+      reverseCandyPosStack.push(bestCandyPosStack.pop());
+      reverseCandyLetterStack.push(bestCandyLetterStack.pop());
+    }
+    reverseBoardStack.push(bestBoardStack.pop());
+    
+    //Output best moveset
+    while(!reverseSwapStack.isEmpty()) {
+      gameBoard = arrayCopy(reverseBoardStack.pop());
+      System.out.println("Current game board: ");
+      printArray(gameBoard);
+      System.out.println("\nPossible Swaps: \n");
+      int possibleSwap = amountOfSwaps(gameBoard);
+      System.out.println("\nAmount of possible swaps: "+possibleSwap);
+      System.out.println("\nThe Swap: ");
+      printArray(reverseSwapStack.pop());
+      int[] candyPos = reverseCandyPosStack.pop();
+      char[] candyLetter = reverseCandyLetterStack.pop();
+      
+      //Prints the message accordingly
+      if(candyLetter[0] == ' ') {
+        System.out.print("\nThe space at row: "+candyPos[0]+", column: "+candyPos[1]+" was swapped with ");
+      } else {
+        System.out.print("\nThe candy "+ candyLetter[0]+" at row: "+candyPos[0]+", column: "+candyPos[1]+" was swapped with ");
+      }
+      if(candyLetter[1] == ' ') {
+        System.out.println("the space at row: "+candyPos[2]+", column: "+candyPos[3]+".");
+      } else {
+        System.out.println("the candy "+candyLetter[1]+" at row: "+candyPos[2]+", column: "+candyPos[3]+".");
+      }
+      System.out.println("\nYou got "+(candyPos[4])+" points!\n");
+    }
+    
+    //Ending message
+    System.out.println("Current game board: ");
+    printArray(reverseBoardStack.pop());
+    System.out.println("\nNo moves left!");
+    System.out.println("\nTotal points earned: "+maxPoints);
+    System.out.println("\nAmount of unique ending boards: "+counter);
+    System.out.println("\nTotal runtime: "+((System.nanoTime()/1000000000.0)-startTime)+" seconds.");
+    System.out.println("\nThank you for playing Candy Cruncher!");
+    System.out.println("\nGame made by: Andy Li");
+  }
+  
+  /**
+   * readFile
+   * This method reads from a text file containing the game board and returns it so it can be used in this file.
+   * @return A 2D char array that contains the game board from the file.
+   */
+  public static char[][] readFile() throws Exception {
+    //Variable initialization
+    File boardFile = new File("board.txt");
+    Scanner input = new Scanner(boardFile);
+    int rows = input.nextInt();
+    int columns = input.nextInt();
+    String line;
+    char[][] gameBoard = new char[rows][columns];
+    
+    //Loop through the file and update the game board.
+    for(int i = 0; i < rows; i++) {
+      line = input.next();
+      for(int j = 0; j < columns; j++) {
+        gameBoard[i][j] = line.charAt(j);
+      }
+    }
+    input.close();
+    return gameBoard;
+  }
+  
+  /**
+   * printArray
+   * This method accepts a 2D char array as input and prints it to the screen along with a border.
+   * @param A 2D char array that needs to be printed
+   */
+  public static void printArray(char[][]gameBoard) {
+    for(int i = 0; i < columns+2; i++) {
+      System.out.print("=");
+    }
+    System.out.println();
+    for(int i = 0; i < rows; i++) {
+      System.out.print("|");
+      for(int j = 0; j < columns; j++) {
+        System.out.print(gameBoard[i][j]);
+      }
+      System.out.println("|");
+    }
+    for(int i = 0; i < columns+2; i++) {
+      System.out.print("=");
+    }
+    System.out.println();
+  }
+  /**
+   * pointCount
+   * This method uses recursion to return the amount of points the swap gives for one of the candies
+   * and deletes the connected candies if they are the same.
+   * @param 2 integers representing the current position that the method is on and a 
+   * character which represents the current candy that the method is on.
+   * @return The amount of points gained from one of the candies that was swapped.
+   */
+  public static int pointCount (int row, int column, char candy) {
+    //Variable initialization
+    int newRow;
+    int newColumn;
+    int points = 0;
+    boolean hasNext = false;
+    int[][] moves = {{1,0},{-1,0},{0,1},{0,-1}};
+    
+    //If the candy is a space, terminate the method. If not, make it blank (as it earned a point) and mark it as visited.
+    if(candy == ' ') {
+      return 0;
+    } else {
+      temporaryBoard[row][column] = ' ';
+      visited[row][column] = 1;
+    }
+    
+    //Check all four directions to see if any candies are the same.
+    for(int i = 0; i < 4; i++) {
+      newRow = row + moves[i][0];
+      newColumn = column + moves[i][1];
+      
+      //If the new coordinates are in bounds, have the same candy as the current one, and have not been visited yet.
+      if(inBounds(newRow, newColumn)) {
+        if((visited[newRow][newColumn]) == 0 && (temporaryBoard[newRow][newColumn] == candy)) {
+          hasNext = true;
+          points += pointCount(newRow, newColumn, candy);
+        }
+      }
+    }
+    
+    //If no more valid candies are connected to it return 1, or else return 1 + the points from the connected candies.
+    if(hasNext) {
+      return points + 1;
+    } else {
+      return 1;
+    }
+  }
+  
+  /**
+   * inBounds
+   * This method checks if the given coordinates are withing the boundaries of the game board.
+   * @param 2 integers that give the coordinates of a point (row,column).
+   * @return A boolean that is true of the coordinates are within the boundaries and false if not.
+   */
+  public static boolean inBounds (int row, int column) {
+    return ((row<rows) && (row>=0) && (column<columns) && (column>=0));
+  }
+  
+  /**
+   * arrayCopy
+   * This method returns a new 2D char array that is the exact same as the array in the parameters
+   * as you cannot make an array "=" another array.
+   * @param A 2D char array that is the array to be copied.
+   * @return A 2D char array that is the copied version of the array.
+   */
+  public static char[][] arrayCopy(char[][] array) {
+    char[][] newArray = new char[array.length][array[0].length];
+    for(int i = 0; i < array.length; i++) {
+      for(int j = 0; j < array[0].length; j++) {
+        newArray[i][j] = array[i][j];
+      }
+    }
+    return newArray;
+  }
+  
+  /**
+   * candyFall
+   * This method makes all the candies in the game fall at the end of every swap.
+   * @param A 2D char array that is the current game board.
+   * @return A 2D char array that is the updated game board with fallen candies.
+   */
+  public static char[][] candyFall (char[][] gameBoard) {
+    for(int i = rows-1; i >= 0; i--) {
+      for(int j = 0; j < columns; j++) {
+        char candy = gameBoard[i][j];
+        boolean highest = true;
+        if(candy == ' ') {
+          do {
+            for(int k = i-1; k >= 0; k--) {
+              if(gameBoard[k][j] != ' ') highest = false;
+              gameBoard[k+1][j] = gameBoard[k][j];
+              gameBoard[k][j] = ' ';
+            }
+            candy = gameBoard[i][j];
+          } while((candy == ' ') && (!highest)); 
+        }
+      }
+    }
+    return gameBoard;
+  }
+  
+  /**
+   * bestMoveSet
+   * This method finds the best possible moves to yield maximumum amount of points and stores it 
+   * in multpiple global stacks for each piece of information needed.
+   * @param A 2D char array which is the current game board and an integer for
+   * the total amount of points earned to this swap (same as amount of spaces in current game board).
+   */
+  public static void bestMoveSet (char[][] gameBoard, int pointsEarned) {
+    //Variable declaration and returns if the whole board is clear (already the max amount of points)
+    //in order to save time.
+    int points1;
+    int points2;
+    int swapCount = 0;
+    int swapPoints = 0;
+    int row2;
+    int column2;
+    char candy1;
+    char candy2;
+    boolean swapped = false;
+    char[][] newGameBoard;
+    char[][] swapDisplay;
+    if(emptyBoard) {
+      return;
+    }
+    
+    
+    //Loop through game board
+    for(int row = 0; row < rows; row++) {
+      for(int column = 0; column < columns; column++) {
+        for(int i = 0; i < 2; i++) {
+          
+          //Row2 and column2 are the coordinates of the other candy. If i is 0, swap horizantally, and if it is 1, swap vertically.
+          row2 = row;
+          column2 = column;
+          if(i == 0) {
+            column2 += 1;
+          } else {
+            row2 += 1;
+          }
+          
+          //The swap
+          if(inBounds(row2,column2)) {
+            swapPoints = 0;
+            candy1 = gameBoard[row][column];
+            candy2 = gameBoard[row2][column2];
+            newGameBoard = arrayCopy(gameBoard);
+            temporaryBoard = arrayCopy(gameBoard);
+            temporaryBoard[row][column] = candy2;
+            temporaryBoard[row2][column2] = candy1;
+            swapDisplay = arrayCopy(temporaryBoard);
+            
+            //For the candy or space at (row,column)
+            visited = new int[rows][columns];
+            points1 = pointCount(row, column, candy2);
+            if(points1 >= 3) {
+              swapped = true;
+              newGameBoard = arrayCopy(temporaryBoard);
+              swapPoints += points1;
+            } else {
+              temporaryBoard = arrayCopy(swapDisplay);
+            }
+            
+            //For the candy or space at (row2,column2)
+            visited = new int[rows][columns];
+            points2 = pointCount(row2, column2, candy1);
+            if(points2 >= 3) {
+              swapped = true;
+              newGameBoard = arrayCopy(temporaryBoard);
+              swapPoints += points2;
+            }
+            
+            //If swap can occur
+            if((points1 >= 3) || (points2 >= 3)) {
+              newGameBoard = candyFall(newGameBoard);
+              
+              //If current board hasn't already been processed/visited yet, push new information into stacks and call itself.
+              if(!duplicateCheck(newGameBoard, pointsEarned + swapPoints)) {
+                duplicateBoard[pointsEarned + swapPoints].add(newGameBoard);
+                boardStack.add(newGameBoard);
+                swapStack.add(swapDisplay);
+                candyPosStack.add(new int[]{row, column, row2, column2, swapPoints});
+                candyLetterStack.add(new char[]{candy1, candy2});
+                bestMoveSet(newGameBoard, pointsEarned + swapPoints);
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    //If there was no swap (no more swaps possible which is base case). Counter is just for amount of unique boards (extra thing, not officially part of program).
+    if(!swapped) {
+      counter += 1;
+      
+      //If more points can be earned then the current maximum
+      if(pointsEarned > maxPoints) {
+        maxPoints = pointsEarned;
+        
+        //If the board is completely empty
+        if(pointsEarned == rows*columns) {
+          emptyBoard = true;
+        }
+        
+        //Copy all the stacks into their respective "best case" stacks, which prevents the need for a returns statement.
+        //If the best stack already has things inside it, it will override it.
+        bestBoardStack = (Stack<char[][]>) boardStack.clone();
+        bestSwapStack = (Stack<char[][]>) swapStack.clone();
+        bestCandyPosStack = (Stack<int[]>) candyPosStack.clone();
+        bestCandyLetterStack = (Stack<char[]>) candyLetterStack.clone();
+      }
+    }
+    
+    //If the current board is just the starting board, some stacks will be empty so this is to prevent empty stack error.
+    //Otherwise, it pops the current elements as everything they lead to have been checked already.
+    if(pointsEarned > 0) {
+      boardStack.pop();
+      swapStack.pop();
+      candyPosStack.pop();
+      candyLetterStack.pop();
+    }
+  }
+  
+  /**
+   * amountOfSwaps
+   * This method counts the amount of possible swaps and their coordinates at any given time.
+   * The coordinates are printed inside this method, and this method contains some reused code from the bestMoveSet method.
+   * @param A 2D char array that is the current game board.
+   * @return An integer which is the amount of possible swaps for the given game board.
+   */
+  public static int amountOfSwaps (char[][] gameBoard) {
+    int swapCount = 0;
+    int swapPoints = 0;
+    int row2;
+    int column2;
+    char candy1;
+    char candy2;
+    char [][] swapDisplay;
+    
+    //Loops through game board to check for possible swaps
+    for(int row = 0; row < rows; row++) {
+      for(int column = 0; column < columns; column++) {
+        for(int i = 0; i < 2; i++) {
+          
+          
+          //Row2 and column2 are the coordinates of the other candy. If i is 0, swap horizantally, and if it is 1, swap vertically.
+          row2 = row;
+          column2 = column;
+          if(i == 0) {
+            column2 += 1;
+          } else {
+            row2 += 1;
+          }
+          
+          //Test the swap
+          if(inBounds(row2,column2)) {
+            swapPoints = 0;
+            candy1 = gameBoard[row][column];
+            candy2 = gameBoard[row2][column2];
+            temporaryBoard = arrayCopy(gameBoard);
+            temporaryBoard[row][column] = candy2;
+            temporaryBoard[row2][column2] = candy1;
+            swapDisplay = arrayCopy(temporaryBoard);
+            
+            //For the candy or space at (row,column)
+            visited = new int[rows][columns];
+            int points1 = pointCount(row,column,candy2);
+            if(points1 < 3) {
+              temporaryBoard = arrayCopy(swapDisplay);
+            } else {
+              swapPoints += points1;
+            }
+            
+            //For the candy or space at (row2,column2)
+            visited = new int[rows][columns];
+            int points2 = pointCount(row2,column2,candy1);
+            if(points2 >= 3) {
+              swapPoints+= points2;
+            }
+            
+            //If the swap can occur
+            if((points1 >= 3) || (points2 >= 3)) {
+              System.out.println("Candies at ("+row+","+column+") and ("+row2+","+(column2)+") can be swapped for "+swapPoints+" points.");
+              swapCount += 1;
+            }
+          }  
+        }
+      }
+    }
+    return swapCount;
+  }
+  
+  /**
+   * duplicateCheck
+   * This method loops through an array of arraylists of 2D char arrays and returs if the given board has been checked already or not (if it is inside an arraylist).
+   * @param A 2D char array which is the current game board and an integer which is teh amount of poitns earned for that game board.
+   * This makes it faster as the index of the outermost array reperesents a unique point value so only visited game boards with the same amount of points as the current game board are considered.
+   * @return A boolean that is true if the current game board has already been checked before and false if otherwise.
+   */
+  public static boolean duplicateCheck(char[][] gameBoard, int points) {
+    int row;
+    int column;
+    boolean same;
+    char[][] comparedBoard;
+    //Loops through the size of the arraylist.
+    for(int k = 0; k < duplicateBoard[points].size(); k++) {
+      
+      //Initlialize varialbes, with comparedBoard being the game board at index k inside the arraylist.
+      comparedBoard = duplicateBoard[points].get(k);
+      same = true;
+      row = 0;
+      column = 0;
+      
+      //Loops through that game board
+      while((same) && (row < rows)) {
+        while((same) && (column<columns)) {
+          if(gameBoard[row][column] != comparedBoard[row][column]) {
+            same = false;
+          }
+          column += 1;
+        }
+        column = 0;
+        row += 1;
+      }
+      
+      //If the 2 boards are the same return true.
+      if(same) {
+        return true;
+      }
+    }
+    
+    //If none of the boards are the same, return false at the end.1
+    return false;
+  }
+}
